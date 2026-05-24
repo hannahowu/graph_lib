@@ -1,13 +1,12 @@
 PROJECT_NAME           = "Graph Library"
 PROJECT_NUMBER         = 1.0
-PROJECT_BRIEF          = "Simple undirected graph library (adjacency lists)"
+PROJECT_BRIEF          = "Simple undirected graph library"
 OUTPUT_DIRECTORY       = docs
 INPUT                  = include/graph.h README.md
+INPUT_ENCODING         = UTF-8
+OUTPUT_LANGUAGE        = English
 RECURSIVE              = NO
 EXTRACT_ALL            = YES
-EXTRACT_STATIC         = NO
 GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
-GENERATE_MAN           = NO
-HAVE_DOT               = NO
 USE_MDFILE_AS_MAINPAGE = README.md
