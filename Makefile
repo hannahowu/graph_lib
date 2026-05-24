@@ -58,7 +58,8 @@ reports:
 	@mkdir -p reports
 
 sanitize: | $(BUILD)
-	$(CC) $(CFLAGS) $(SANFLAGS) -o $(SAN_BIN) $(SRC_TEST) $(SRC_LIB)
+	@echo "=== Запуск тестов в режиме строгой проверки (Windows: ASan/UBSan недоступны в MinGW) ==="
+	$(CC) $(CFLAGS) -Werror -D_FORTIFY_SOURCE=2 -o $(SAN_BIN) $(SRC_TEST) $(SRC_LIB)
 	./$(SAN_BIN)
 
 docs-html: Doxyfile
