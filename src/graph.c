@@ -3,9 +3,10 @@
 #include <string.h>
 
 /* ------------------------------------------------------------------ */
-/* Внутренние структуры (скрыты от пользователя)                      */
+/* Внутренние структуры (скрыты от пользователя через opaque pointer) */
 /* ------------------------------------------------------------------ */
 
+/** Запись одной вершины: её ID и динамический массив соседей */
 typedef struct {
     int     vertex;
     int*    neighbors;
@@ -13,6 +14,7 @@ typedef struct {
     size_t  neighbor_capacity;
 } vertex_entry_t;
 
+/** Структура графа. Не экспортируется в .h, поэтому пользователь не знает деталей реализации */
 struct graph {
     vertex_entry_t* vertices;
     size_t          vertex_count;
@@ -21,9 +23,13 @@ struct graph {
 };
 
 /* ------------------------------------------------------------------ */
-/* Вспомогательные функции (внутренние, static)                       */
+/* Вспомогательные функции (static: видны только в этом файле)        */
 /* ------------------------------------------------------------------ */
 
+/** 
+ * Линейный поиск индекса вершины по её ID.
+ * @return Индекс в массиве vertices или -1, если вершина не найдена.
+ */
 static int find_vertex_index(const graph_t* g, int vertex) {
     for (size_t i = 0; i < g->vertex_count; ++i) {
         if (g->vertices[i].vertex == vertex) {
@@ -33,6 +39,11 @@ static int find_vertex_index(const graph_t* g, int vertex) {
     return -1;
 }
 
+/**
+ * Добавляет соседа в динамический массив вершины.
+ * При переполнении ёмкость удваивается через realloc.
+ * @return 1 при успехе, 0 при ошибке выделения памяти.
+ */
 static int add_neighbor(vertex_entry_t* v, int neighbor) {
     if (v->neighbor_count == v->neighbor_capacity) {
         size_t new_cap = v->neighbor_capacity == 0 ? 4 : v->neighbor_capacity * 2;
@@ -45,6 +56,12 @@ static int add_neighbor(vertex_entry_t* v, int neighbor) {
     return 1;
 }
 
+/**
+ * Удаляет соседа из массива за O(1) без сдвига элементов.
+ * Замена: удаляемый элемент перезаписывается последним, счётчик уменьшается.
+ * Допустимо, так как порядок соседей в неориентированном графе не важен.
+ * @return 1 если сосед найден и удалён, 0 иначе.
+ */
 static int remove_neighbor(vertex_entry_t* v, int neighbor) {
     for (size_t i = 0; i < v->neighbor_count; ++i) {
         if (v->neighbors[i] == neighbor) {
@@ -56,11 +73,31 @@ static int remove_neighbor(vertex_entry_t* v, int neighbor) {
     return 0;
 }
 
+/** Проверка наличия соседа в массиве (линейный поиск) */
 static int has_neighbor(const vertex_entry_t* v, int neighbor) {
     for (size_t i = 0; i < v->neighbor_count; ++i) {
         if (v->neighbors[i] == neighbor) return 1;
     }
     return 0;
+}
+
+/**
+ * Рекурсивный обход в глубину.
+ * visited[] гарантирует, что каждая вершина посещается ровно один раз,
+ * предотвращая бесконечную рекурсию в циклах графа.
+ */
+static void dfs_visit(const graph_t* g, int idx, int* visited,
+                      int* out, size_t* out_count) {
+    visited[idx] = 1;
+    out[(*out_count)++] = g->vertices[idx].vertex;
+    
+    const vertex_entry_t* v = &g->vertices[idx];
+    for (size_t i = 0; i < v->neighbor_count; ++i) {
+        int ni = find_vertex_index(g, v->neighbors[i]);
+        if (ni >= 0 && !visited[ni]) {
+            dfs_visit(g, ni, visited, out, out_count);
+        }
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -72,6 +109,7 @@ graph_t* graph_create(size_t capacity, graph_error_t* err) {
         if (err) *err = GRAPH_ERR_INVALID_SIZE;
         return NULL;
     }
+    // calloc обнуляет все поля структуры сразу
     graph_t* g = (graph_t*)calloc(1, sizeof(graph_t));
     if (!g) {
         if (err) *err = GRAPH_ERR_ALLOC_FAILED;
@@ -79,7 +117,7 @@ graph_t* graph_create(size_t capacity, graph_error_t* err) {
     }
     g->vertices = (vertex_entry_t*)calloc(capacity, sizeof(vertex_entry_t));
     if (!g->vertices) {
-        free(g);
+        free(g); // Не забываем освободить саму структуру при ошибке
         if (err) *err = GRAPH_ERR_ALLOC_FAILED;
         return NULL;
     }
@@ -89,7 +127,7 @@ graph_t* graph_create(size_t capacity, graph_error_t* err) {
 }
 
 void graph_destroy(graph_t* g) {
-    if (!g) return;
+    if (!g) return; // Безопасный вызов для NULL
     for (size_t i = 0; i < g->vertex_count; ++i) {
         free(g->vertices[i].neighbors);
     }
@@ -101,11 +139,13 @@ graph_error_t graph_add_vertex(graph_t* g, int vertex) {
     if (!g) return GRAPH_ERR_NULL_PTR;
     if (find_vertex_index(g, vertex) >= 0) return GRAPH_ERR_VERTEX_EXISTS;
 
+    // Если массив заполнен, удваиваем ёмкость
     if (g->vertex_count == g->vertex_capacity) {
         size_t new_cap = g->vertex_capacity * 2;
         vertex_entry_t* tmp = (vertex_entry_t*)realloc(
             g->vertices, new_cap * sizeof(vertex_entry_t));
         if (!tmp) return GRAPH_ERR_ALLOC_FAILED;
+        // Обнуляем новые элементы, чтобы avoid мусора
         memset(tmp + g->vertex_capacity, 0,
                (new_cap - g->vertex_capacity) * sizeof(vertex_entry_t));
         g->vertices = tmp;
@@ -127,7 +167,7 @@ int graph_has_vertex(const graph_t* g, int vertex) {
 
 graph_error_t graph_add_edge(graph_t* g, int u, int v) {
     if (!g) return GRAPH_ERR_NULL_PTR;
-    if (u == v) return GRAPH_ERR_SELF_LOOP;
+    if (u == v) return GRAPH_ERR_SELF_LOOP; // Петли запрещены
 
     int ui = find_vertex_index(g, u);
     int vi = find_vertex_index(g, v);
@@ -138,9 +178,14 @@ graph_error_t graph_add_edge(graph_t* g, int u, int v) {
 
     if (has_neighbor(eu, v)) return GRAPH_ERR_EDGE_EXISTS;
 
+    // Сначала добавляем v в список соседей u
     if (!add_neighbor(eu, v)) return GRAPH_ERR_ALLOC_FAILED;
+
+    // Затем добавляем u в список соседей v (неориентированность)
+    // ВАЖНО: если здесь произойдёт ошибка памяти, нужно откатить первое изменение,
+    // иначе граф окажется в несогласованном состоянии (ребро есть только в одну сторону).
     if (!add_neighbor(ev, u)) {
-        remove_neighbor(eu, v);
+        remove_neighbor(eu, v); // Откат
         return GRAPH_ERR_ALLOC_FAILED;
     }
     g->edge_count++;
@@ -156,6 +201,7 @@ graph_error_t graph_remove_edge(graph_t* g, int u, int v) {
     vertex_entry_t* eu = &g->vertices[ui];
     vertex_entry_t* ev = &g->vertices[vi];
 
+    // Удаляем из обоих списков смежности. Если ребра нет хотя бы в одном — ошибка.
     if (!remove_neighbor(eu, v) || !remove_neighbor(ev, u)) {
         return GRAPH_ERR_EDGE_NOT_FOUND;
     }
@@ -168,20 +214,6 @@ int graph_are_adjacent(const graph_t* g, int u, int v) {
     int ui = find_vertex_index(g, u);
     if (ui < 0) return 0;
     return has_neighbor(&g->vertices[ui], v) ? 1 : 0;
-}
-
-/* Рекурсивный DFS (внутренний) */
-static void dfs_visit(const graph_t* g, int idx, int* visited,
-                      int* out, size_t* out_count) {
-    visited[idx] = 1;
-    out[(*out_count)++] = g->vertices[idx].vertex;
-    const vertex_entry_t* v = &g->vertices[idx];
-    for (size_t i = 0; i < v->neighbor_count; ++i) {
-        int ni = find_vertex_index(g, v->neighbors[i]);
-        if (ni >= 0 && !visited[ni]) {
-            dfs_visit(g, ni, visited, out, out_count);
-        }
-    }
 }
 
 graph_error_t graph_dfs(const graph_t* g, int start,
@@ -199,8 +231,8 @@ graph_error_t graph_dfs(const graph_t* g, int start,
 
     *out_count = 0;
     dfs_visit(g, si, visited, result, out_count);
-    free(visited);
-    *out_vertices = result;
+    free(visited); // Временный массив больше не нужен
+    *out_vertices = result; // Передаём владение вызывающему
     return GRAPH_OK;
 }
 
@@ -220,18 +252,19 @@ graph_error_t graph_bfs(const graph_t* g, int start,
 
     size_t head = 0, tail = 0;
     visited[si] = 1;
-    queue[tail++] = (size_t)si;
+    queue[tail++] = (size_t)si; // Стартовая вершина в очереди
 
     *out_count = 0;
     while (head < tail) {
-        size_t cur = queue[head++];
+        size_t cur = queue[head++]; // Извлечение из начала
         result[(*out_count)++] = g->vertices[cur].vertex;
+
         const vertex_entry_t* v = &g->vertices[cur];
         for (size_t i = 0; i < v->neighbor_count; ++i) {
             int ni = find_vertex_index(g, v->neighbors[i]);
             if (ni >= 0 && !visited[ni]) {
                 visited[ni] = 1;
-                queue[tail++] = (size_t)ni;
+                queue[tail++] = (size_t)ni; // Добавление в конец
             }
         }
     }
@@ -243,7 +276,7 @@ graph_error_t graph_bfs(const graph_t* g, int start,
 }
 
 void graph_free_traversal(int* arr) {
-    free(arr);
+    free(arr); // Парная функция для явного указания правил владения памятью
 }
 
 size_t graph_vertex_count(const graph_t* g) {
