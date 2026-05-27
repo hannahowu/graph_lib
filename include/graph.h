@@ -1,15 +1,15 @@
 /**
  * @file graph.h
- * @brief Публичный интерфейс библиотеки простого неориентированного графа
- *        на основе списков смежности.
+ * @brief Public interface for a simple undirected graph library
+ *        based on adjacency lists.
  *
- * Библиотека предоставляет тип graph_t (непрозрачная структура) и набор
- * функций для работы с неориентированным графом: добавление/удаление
- * вершин и рёбер, проверка смежности, обходы DFS и BFS.
+ * This library provides an opaque graph_t type and a set of functions
+ * to manage an undirected graph: adding/removing vertices and edges,
+ * checking adjacency, and performing DFS/BFS traversals.
  *
- * @note Все функции, принимающие graph_t*, требуют ненулевой указатель.
- * @note Память, выделенная функциями обхода (graph_dfs, graph_bfs), должна
- *       быть освобождена вызовом graph_free_traversal().
+ * @note All functions accepting graph_t* require a non-NULL pointer.
+ * @note Memory allocated by graph_dfs() and graph_bfs() must be
+ *       freed by the caller using graph_free_traversal().
  */
 
 #ifndef GRAPH_H
@@ -22,139 +22,136 @@ extern "C" {
 #endif
 
 /**
- * @brief Коды ошибок, возвращаемые функциями библиотеки.
+ * @brief Error codes returned by library functions.
  */
 typedef enum {
-    GRAPH_OK                 = 0,  /**< Успешное выполнение */
-    GRAPH_ERR_NULL_PTR       = 1,  /**< Передан NULL-указатель */
-    GRAPH_ERR_INVALID_SIZE   = 2,  /**< Некорректный размер (0 или слишком большой) */
-    GRAPH_ERR_ALLOC_FAILED   = 3,  /**< Ошибка выделения памяти */
-    GRAPH_ERR_VERTEX_EXISTS  = 4,  /**< Вершина уже существует */
-    GRAPH_ERR_VERTEX_NOT_FOUND = 5,/**< Вершина не найдена */
-    GRAPH_ERR_EDGE_EXISTS    = 6,  /**< Ребро уже существует */
-    GRAPH_ERR_EDGE_NOT_FOUND = 7,  /**< Ребро не найдено */
-    GRAPH_ERR_SELF_LOOP      = 8   /**< Петли (u == v) запрещены */
+    GRAPH_OK                 = 0,  /**< Successful operation */
+    GRAPH_ERR_NULL_PTR       = 1,  /**< NULL pointer argument */
+    GRAPH_ERR_INVALID_SIZE   = 2,  /**< Invalid size (zero or too large) */
+    GRAPH_ERR_ALLOC_FAILED   = 3,  /**< Memory allocation failure */
+    GRAPH_ERR_VERTEX_EXISTS  = 4,  /**< Vertex already exists in the graph */
+    GRAPH_ERR_VERTEX_NOT_FOUND = 5,/**< Vertex not found in the graph */
+    GRAPH_ERR_EDGE_EXISTS    = 6,  /**< Edge already exists */
+    GRAPH_ERR_EDGE_NOT_FOUND = 7,  /**< Edge not found */
+    GRAPH_ERR_SELF_LOOP      = 8   /**< Self-loops (u == v) are not allowed */
 } graph_error_t;
 
 /**
- * @brief Непрозрачный тип графа.
+ * @brief Opaque handle for the graph structure.
  */
 typedef struct graph graph_t;
 
 /**
- * @brief Создаёт пустой граф с начальной вместимостью.
- *
- * @param[in]  capacity  Начальная вместимость (максимальное число вершин до
- *                       первого расширения). Должна быть > 0.
- * @param[out] err       Указатель для кода ошибки. Может быть NULL.
- * @return Указатель на созданный граф или NULL при ошибке.
+ * @brief Creates an empty graph with initial capacity.
+ * @param[in]  capacity Initial vertex capacity (must be > 0).
+ * @param[out] err      Pointer to store error code. Can be NULL.
+ * @return Pointer to the created graph, or NULL on error.
  */
 graph_t* graph_create(size_t capacity, graph_error_t* err);
 
 /**
- * @brief Освобождает все ресурсы, занятые графом.
- * @param[in] g Граф (может быть NULL — тогда ничего не делается).
+ * @brief Destroys the graph and frees all associated memory.
+ * @param[in] g Graph handle (safe to pass NULL).
  */
 void graph_destroy(graph_t* g);
 
 /**
- * @brief Добавляет вершину в граф.
- * @param g      Граф.
- * @param vertex Идентификатор вершины (целое число).
- * @return GRAPH_OK или код ошибки.
+ * @brief Adds a vertex to the graph.
+ * @param g      Graph handle.
+ * @param vertex Vertex identifier (integer).
+ * @return GRAPH_OK or an error code.
  */
 graph_error_t graph_add_vertex(graph_t* g, int vertex);
 
 /**
- * @brief Проверяет, содержит ли граф указанную вершину.
- * @param g      Граф.
- * @param vertex Идентификатор вершины.
- * @return 1 — вершина есть, 0 — нет, -1 — ошибка (NULL).
+ * @brief Checks if the graph contains a specific vertex.
+ * @param g      Graph handle.
+ * @param vertex Vertex identifier.
+ * @return 1 if present, 0 if absent, -1 if g is NULL.
  */
 int graph_has_vertex(const graph_t* g, int vertex);
 
 /**
- * @brief Добавляет неориентированное ребро между двумя вершинами.
- *        Обе вершины должны уже существовать.
- * @param g Граф.
- * @param u Первая вершина.
- * @param v Вторая вершина.
- * @return GRAPH_OK или код ошибки.
+ * @brief Adds an undirected edge between two existing vertices.
+ * @param g Graph handle.
+ * @param u First vertex identifier.
+ * @param v Second vertex identifier.
+ * @return GRAPH_OK or an error code.
  */
 graph_error_t graph_add_edge(graph_t* g, int u, int v);
 
 /**
- * @brief Удаляет ребро между двумя вершинами.
- * @param g Граф.
- * @param u Первая вершина.
- * @param v Вторая вершина.
- * @return GRAPH_OK или GRAPH_ERR_EDGE_NOT_FOUND.
+ * @brief Removes an edge between two vertices.
+ * @param g Graph handle.
+ * @param u First vertex identifier.
+ * @param v Second vertex identifier.
+ * @return GRAPH_OK or GRAPH_ERR_EDGE_NOT_FOUND.
  */
 graph_error_t graph_remove_edge(graph_t* g, int u, int v);
 
 /**
- * @brief Проверяет, смежны ли две вершины.
- * @param g Граф.
- * @param u Первая вершина.
- * @param v Вторая вершина.
- * @return 1 — смежны, 0 — не смежны (или вершины не существуют), -1 — ошибка.
+ * @brief Checks if two vertices are adjacent.
+ * @param g Graph handle.
+ * @param u First vertex identifier.
+ * @param v Second vertex identifier.
+ * @return 1 if adjacent, 0 if not (or vertices missing), -1 if g is NULL.
  */
 int graph_are_adjacent(const graph_t* g, int u, int v);
 
 /**
- * @brief Обход графа в глубину (DFS) из заданной стартовой вершины.
+ * @brief Performs Depth-First Search (DFS) from a start vertex.
  *
- * Выделяет массив идентификаторов посещённых вершин в порядке обхода.
- * Память должна быть освобождена graph_free_traversal().
+ * Allocates an array of visited vertex identifiers.
+ * The caller must free the array using graph_free_traversal().
  *
- * @param[in]  g           Граф.
- * @param[in]  start       Стартовая вершина.
- * @param[out] out_vertices Указатель на массив вершин (заполняется функцией).
- * @param[out] out_count   Количество посещённых вершин.
- * @return GRAPH_OK или код ошибки.
+ * @param[in]  g           Graph handle.
+ * @param[in]  start       Starting vertex identifier.
+ * @param[out] out_vertices Pointer to store the allocated array.
+ * @param[out] out_count   Pointer to store the number of visited vertices.
+ * @return GRAPH_OK or an error code.
  */
 graph_error_t graph_dfs(const graph_t* g, int start,
                         int** out_vertices, size_t* out_count);
 
 /**
- * @brief Обход графа в ширину (BFS) из заданной стартовой вершины.
+ * @brief Performs Breadth-First Search (BFS) from a start vertex.
  *
- * Выделяет массив идентификаторов посещённых вершин в порядке обхода.
- * Память должна быть освобождена graph_free_traversal().
+ * Allocates an array of visited vertex identifiers.
+ * The caller must free the array using graph_free_traversal().
  *
- * @param[in]  g           Граф.
- * @param[in]  start       Стартовая вершина.
- * @param[out] out_vertices Указатель на массив вершин (заполняется функцией).
- * @param[out] out_count   Количество посещённых вершин.
- * @return GRAPH_OK или код ошибки.
+ * @param[in]  g           Graph handle.
+ * @param[in]  start       Starting vertex identifier.
+ * @param[out] out_vertices Pointer to store the allocated array.
+ * @param[out] out_count   Pointer to store the number of visited vertices.
+ * @return GRAPH_OK or an error code.
  */
 graph_error_t graph_bfs(const graph_t* g, int start,
                         int** out_vertices, size_t* out_count);
 
 /**
- * @brief Освобождает массив, выделенный graph_dfs() / graph_bfs().
- * @param arr Массив (может быть NULL).
+ * @brief Frees the array allocated by graph_dfs() or graph_bfs().
+ * @param arr Array pointer (safe to pass NULL).
  */
 void graph_free_traversal(int* arr);
 
 /**
- * @brief Возвращает число вершин в графе.
- * @param g Граф.
- * @return Число вершин или 0 при g == NULL.
+ * @brief Returns the number of vertices in the graph.
+ * @param g Graph handle.
+ * @return Vertex count, or 0 if g is NULL.
  */
 size_t graph_vertex_count(const graph_t* g);
 
 /**
- * @brief Возвращает число рёбер в графе.
- * @param g Граф.
- * @return Число рёбер или 0 при g == NULL.
+ * @brief Returns the number of edges in the graph.
+ * @param g Graph handle.
+ * @return Edge count, or 0 if g is NULL.
  */
 size_t graph_edge_count(const graph_t* g);
 
 /**
- * @brief Возвращает строковое представление кода ошибки.
- * @param err Код ошибки.
- * @return Строковая константа (статическая память, освобождать не нужно).
+ * @brief Returns a human-readable string for an error code.
+ * @param err Error code.
+ * @return Static string describing the error.
  */
 const char* graph_error_string(graph_error_t err);
 
